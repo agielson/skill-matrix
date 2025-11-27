@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+postgres/data/
+id_rsa
+id_rsa.pub
