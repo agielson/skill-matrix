@@ -1,7 +1,8 @@
-# main.py
+# insert_records.py
 from generate import data
 import psycopg2
 import json
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +11,6 @@ def connect_to_db():
     print("🔌 Connecting to the Postgres database...")
     try:
         conn = psycopg2.connect(
-            host="localhost",
             host=os.getenv('DB_HOST'),
             port=os.getenv('DB_PORT'),
             dbname=os.getenv('DB_NAME'),
@@ -180,6 +180,7 @@ def get_stats(conn):
 def main():
     conn = None
     try:
+        
         # Получаем данные из excel_to_json_remote
         data_dict = data()
         employees_json = data_dict['employees']
@@ -193,7 +194,7 @@ def main():
         
         if len(employees_data) == 0 or len(tasks_data) == 0:
             print("❌ Нет данных для вставки")
-            return
+            return "NO_DATA"  # Добавьте возвращаемое значение
         
         # Подключаемся и работаем с БД
         conn = connect_to_db()
@@ -210,8 +211,11 @@ def main():
         print(f"   Employees processed: {employees_count}")
         print(f"   Tasks processed: {tasks_count}")
         
+        return f"SUCCESS: {employees_count} employees, {tasks_count} tasks"
+        
     except Exception as e:
         print(f"❌ An error occurred: {e}")
+        return f"ERROR: {str(e)}"
     finally:
         if conn:
             conn.close()

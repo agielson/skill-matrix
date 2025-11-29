@@ -1,0 +1,37 @@
+version: 2
+
+sources:
+  - name: dev
+    database: db
+    schema: dev
+    tables:
+      - name: employees
+        columns:
+          - name: id
+          - name: country
+          - name: factory
+          - name: department
+          - name: team
+          - name: employee_full_name
+          - name: employee_id
+          - name: position
+          - name: age
+          - name: gender
+          - name: competencies
+          - name: planned_vacation_date
+          - name: created_at
+          - name: updated_at
+
+      - name: tasks
+        columns:
+          - name: id
+          - name: task_id
+          - name: task_name
+          - name: department
+          - name: team
+          - name: factory
+          - name: country
+          - name: required_competency
+          - name: required_position
+          - name: deadline
+          - name: created_at
