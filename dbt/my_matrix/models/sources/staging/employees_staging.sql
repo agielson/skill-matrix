@@ -22,8 +22,5 @@ select
     age,
     gender,
     competencies,
-    planned_vacation_date,
-    -- Исправленный синтаксис для конвертации времени
-    created_at at time zone 'utc' at time zone 'Europe/Moscow' as created_at_local,
-    updated_at at time zone 'utc' at time zone 'Europe/Moscow' as updated_at_local
+    planned_vacation_date
 from source

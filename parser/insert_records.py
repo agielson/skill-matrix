@@ -38,7 +38,7 @@ def create_tables(conn):
                 department VARCHAR(100) NOT NULL,
                 team VARCHAR(100) NOT NULL,
                 employee_full_name VARCHAR(200) NOT NULL,
-                employee_id VARCHAR(50) UNIQUE NOT NULL,
+                employee_id VARCHAR(50) NOT NULL,
                 position VARCHAR(100) NOT NULL,
                 age INTEGER NOT NULL CHECK (age >= 18 AND age <= 70),
                 gender VARCHAR(20) NOT NULL,
@@ -50,7 +50,7 @@ def create_tables(conn):
             
             CREATE TABLE IF NOT EXISTS dev.tasks (
                 id SERIAL PRIMARY KEY,
-                task_id VARCHAR(50) UNIQUE NOT NULL,
+                task_id VARCHAR(50) NOT NULL,
                 task_name VARCHAR(200) NOT NULL,
                 department VARCHAR(100) NOT NULL,
                 team VARCHAR(100) NOT NULL,
@@ -62,8 +62,30 @@ def create_tables(conn):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        
+        cursor.execute("""
+            DO $$ 
+            BEGIN 
+                -- Для employees
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'employees_employee_id_key'
+                ) THEN
+                    ALTER TABLE dev.employees ADD UNIQUE (employee_id);
+                END IF;
+                
+                -- Для tasks
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'tasks_task_id_key'
+                ) THEN
+                    ALTER TABLE dev.tasks ADD UNIQUE (task_id);
+                END IF;
+            END $$;
+        """)
+        
         conn.commit()
-        print("✅ Tables were created successfully")
+        print("✅ Tables were created successfully with unique constraints")
     except psycopg2.Error as e:
         print(f"❌ Failed to create tables: {e}")
         raise
@@ -91,8 +113,7 @@ def insert_employees(conn, employees_json):
                     age = EXCLUDED.age,
                     gender = EXCLUDED.gender,
                     competencies = EXCLUDED.competencies,
-                    planned_vacation_date = EXCLUDED.planned_vacation_date,
-                    updated_at = CURRENT_TIMESTAMP
+                    planned_vacation_date = EXCLUDED.planned_vacation_date
             """, (
                 employee.get('Country'),
                 employee.get('Factory'), 
