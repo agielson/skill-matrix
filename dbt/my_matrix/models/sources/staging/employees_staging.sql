@@ -1,6 +1,6 @@
 {{ 
     config(
-        materialized='view',
+        materialized='table',
         unique_key='id'
     )
 }}

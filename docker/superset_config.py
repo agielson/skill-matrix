@@ -25,6 +25,7 @@ import os
 import sys
 
 from celery.schedules import crontab
+from flask_caching.backends.rediscache import RedisCache
 from flask_caching.backends.filesystemcache import FileSystemCache
 
 logger = logging.getLogger()
@@ -68,16 +69,23 @@ REDIS_RESULTS_DB = os.getenv("REDIS_RESULTS_DB", "1")
 
 RESULTS_BACKEND = FileSystemCache("/app/superset_home/sqllab")
 
+# В superset_config.py
+
 CACHE_CONFIG = {
-    "CACHE_TYPE": "RedisCache",
-    "CACHE_DEFAULT_TIMEOUT": 300,
-    "CACHE_KEY_PREFIX": "superset_",
-    "CACHE_REDIS_HOST": REDIS_HOST,
-    "CACHE_REDIS_PORT": REDIS_PORT,
-    "CACHE_REDIS_DB": REDIS_RESULTS_DB,
+    'CACHE_TYPE': 'RedisCache',
+    'CACHE_REDIS_HOST': 'redis',  # или 'superset_cache', в зависимости от выбранного решения
+    'CACHE_REDIS_PORT': 6379,
+    'CACHE_REDIS_DB': 0,
+    'CACHE_REDIS_URL': 'redis://redis:6379/0'
 }
-DATA_CACHE_CONFIG = CACHE_CONFIG
-THUMBNAIL_CACHE_CONFIG = CACHE_CONFIG
+
+DATA_CACHE_CONFIG = {
+    'CACHE_TYPE': 'RedisCache',
+    'CACHE_REDIS_HOST': 'redis',
+    'CACHE_REDIS_PORT': 6379,
+    'CACHE_REDIS_DB': 1,
+    'CACHE_REDIS_URL': 'redis://redis:6379/1'
+}
 
 
 class CeleryConfig:

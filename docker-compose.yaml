@@ -42,8 +42,10 @@ services:
     networks:
       - my-network 
     command: >
-      bash -c "python -m pip install --break-system-packages openpyxl pandas paramiko python-dotenv psycopg2-binary && sleep 10 && airflow db migrate && airflow standalone"
-
+      bash -c "python -m pip install --break-system-packages openpyxl pandas paramiko python-dotenv psycopg2-binary && 
+             sleep 20 && 
+             airflow db migrate && 
+             airflow standalone"
   dbt:
     container_name: dbt_container
     image: ghcr.io/dbt-labs/dbt-postgres:1.9.latest
@@ -57,17 +59,20 @@ services:
       - db
     networks:
       - my-network
-    command: run  
+    # command: run  
+    command: bash -c "sleep 60 && dbt run"
 
 
   redis:
     image: redis:7
-    container_name: superset_cache
+    container_name: redis  # ← Изменили здесь
     restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis:/data
+    networks:  # ← Добавьте это!
+    - my-network  # ← И это!
 
   superset-init:
     image: apache/superset:3.0.0-py310
@@ -78,7 +83,7 @@ services:
         sleep 20
         superset db upgrade
         superset fab create-admin --username admin --firstname Admin --lastname User --email admin@admin.com --password admin
-        superset init --skip-examples
+        superset init # <-- Удалена опция --skip-examples
         echo 'Superset initialization completed successfully'
         exit 0
       "
