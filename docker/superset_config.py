@@ -69,6 +69,8 @@ REDIS_RESULTS_DB = os.getenv("REDIS_RESULTS_DB", "1")
 
 RESULTS_BACKEND = FileSystemCache("/app/superset_home/sqllab")
 
+PUBLIC_ROLE_LIKE_GAMMA = True
+
 # В superset_config.py
 
 CACHE_CONFIG = {
