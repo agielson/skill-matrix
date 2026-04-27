@@ -28,7 +28,7 @@ def get_excel_data_from_server(server_ip, username, password):
         employees_json = json.dumps(employees_df.to_dict('records'), ensure_ascii=False, default=str)
         results['employees'] = employees_json
         employees_file.close()
-        print(f"✅ Employees: {len(employees_df)} записей")
+        print(f"✅ Сотрудники: {len(employees_df)} записей")
         
         # Обработка tasks.xlsx
         print("📖 Чтение tasks.xlsx...")
@@ -38,7 +38,7 @@ def get_excel_data_from_server(server_ip, username, password):
         tasks_json = json.dumps(tasks_df.to_dict('records'), ensure_ascii=False, default=str)
         results['tasks'] = tasks_json
         tasks_file.close()
-        print(f"✅ Tasks: {len(tasks_df)} записей")
+        print(f"✅ Задачи: {len(tasks_df)} записей")
         
         sftp.close()
         ssh.close()
@@ -66,5 +66,5 @@ if __name__ == "__main__":
     employees_json = data_dict['employees']
     tasks_json = data_dict['tasks']
     
-    print(f"📊 Employees JSON: {len(employees_json)} chars")
-    print(f"📊 Tasks JSON: {len(tasks_json)} chars")
+    print(f"📊 JSON сотрудников: {len(employees_json)} символов")
+    print(f"📊 JSON задач: {len(tasks_json)} символов")

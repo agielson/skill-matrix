@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+asyncpg
+python-jose[cryptography]
+bcrypt
+pydantic-settings
+python-multipart

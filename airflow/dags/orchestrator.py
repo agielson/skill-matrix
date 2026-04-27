@@ -1,4 +1,5 @@
 import sys
+import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -15,6 +16,9 @@ with DAG(
     catchup=False,
     tags=['dev'],
 ) as dag:
+    dbt_project_host_path = os.getenv("DBT_PROJECT_HOST_PATH", "/opt/airflow/dbt/my_matrix")
+    dbt_profiles_host_path = os.getenv("DBT_PROFILES_HOST_PATH", "/opt/airflow/dbt/profiles.yml")
+    docker_network = os.getenv("AIRFLOW_DOCKER_NETWORK", "skill-matrix-project_my-network")
     
     task1 = PythonOperator(
         task_id='ingest_data_task',
@@ -27,14 +31,14 @@ with DAG(
         command='run',
         working_dir='/usr/app',
         mounts=[
-            Mount(source='/home/agielso/repos/skill-matrix-project/dbt/my_matrix',
+            Mount(source=dbt_project_host_path,
                 target='/usr/app',
                 type='bind'),
-            Mount(source='/home/agielso/repos/skill-matrix-project/dbt/profiles.yml',
+            Mount(source=dbt_profiles_host_path,
                 target='/root/.dbt/profiles.yml',
                 type='bind'),
         ],
-        network_mode='skill-matrix-project_my-network',
+        network_mode=docker_network,
         docker_url='unix://var/run/docker.sock',
         auto_remove='success'
     )

@@ -61,6 +61,30 @@ def create_tables(conn):
                 deadline DATE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS dev.task_status (
+                id SERIAL PRIMARY KEY,
+                task_id VARCHAR(50) UNIQUE,
+                status VARCHAR(30) DEFAULT 'new',
+                priority INTEGER DEFAULT 3,
+                assigned_employee_id VARCHAR(50),
+                assigned_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                notes TEXT,
+                updated_by VARCHAR(100),
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS dev.employee_competency_level (
+                id SERIAL PRIMARY KEY,
+                employee_id VARCHAR(50) NOT NULL,
+                competency VARCHAR(100) NOT NULL,
+                level INTEGER DEFAULT 1,
+                confirmed_by VARCHAR(100),
+                confirmed_at TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (employee_id, competency)
+            );
         """)
         
         cursor.execute("""
@@ -134,6 +158,69 @@ def insert_employees(conn, employees_json):
         return inserted_count
     except psycopg2.Error as e:
         print(f"❌ Error inserting employees: {e}")
+        conn.rollback()
+        return 0
+
+
+def upsert_task_status_defaults(conn):
+    """Ensure every task has a status row."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO dev.task_status (task_id, status, priority, updated_by)
+            SELECT t.task_id, 'new', 3, 'airflow'
+            FROM dev.tasks t
+            LEFT JOIN dev.task_status ts ON ts.task_id = t.task_id
+            WHERE ts.task_id IS NULL
+            """
+        )
+        inserted = cursor.rowcount
+        conn.commit()
+        print(f"✅ Task status defaults synced: {inserted}")
+        return inserted
+    except psycopg2.Error as e:
+        print(f"❌ Error syncing task_status defaults: {e}")
+        conn.rollback()
+        return 0
+
+
+def _derive_level(position: str | None) -> int:
+    raw = (position or "").strip().lower()
+    if any(key in raw for key in ["lead", "senior", "руковод", "сеньор"]):
+        return 3
+    if any(key in raw for key in ["middle", "mid", "мидл"]):
+        return 2
+    return 1
+
+
+def upsert_employee_competency_levels(conn, employees_json):
+    try:
+        employees_data = json.loads(employees_json)
+        cursor = conn.cursor()
+        total = 0
+        for employee in employees_data:
+            employee_id = employee.get("Employee_ID")
+            level = _derive_level(employee.get("Position"))
+            competencies = str(employee.get("Competencies") or "")
+            for competency in [c.strip() for c in competencies.replace(";", ",").split(",") if c.strip()]:
+                cursor.execute(
+                    """
+                    INSERT INTO dev.employee_competency_level (employee_id, competency, level, confirmed_by)
+                    VALUES (%s, %s, %s, 'airflow')
+                    ON CONFLICT (employee_id, competency) DO UPDATE SET
+                        level = EXCLUDED.level,
+                        confirmed_by = EXCLUDED.confirmed_by,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (employee_id, competency, level),
+                )
+                total += 1
+        conn.commit()
+        print(f"✅ Competency levels synced: {total}")
+        return total
+    except psycopg2.Error as e:
+        print(f"❌ Error syncing competency levels: {e}")
         conn.rollback()
         return 0
 
@@ -224,6 +311,8 @@ def main():
         # Вставляем данные
         employees_count = insert_employees(conn, employees_json)
         tasks_count = insert_tasks(conn, tasks_json)
+        status_count = upsert_task_status_defaults(conn)
+        competency_levels_count = upsert_employee_competency_levels(conn, employees_json)
         
         # Показываем статистику
         get_stats(conn)
@@ -231,8 +320,13 @@ def main():
         print(f"\n🎉 All operations completed successfully!")
         print(f"   Employees processed: {employees_count}")
         print(f"   Tasks processed: {tasks_count}")
+        print(f"   Task status synced: {status_count}")
+        print(f"   Competency levels synced: {competency_levels_count}")
         
-        return f"SUCCESS: {employees_count} employees, {tasks_count} tasks"
+        return (
+            f"SUCCESS: {employees_count} employees, {tasks_count} tasks, "
+            f"{status_count} statuses, {competency_levels_count} competency levels"
+        )
         
     except Exception as e:
         print(f"❌ An error occurred: {e}")

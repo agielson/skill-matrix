@@ -1,40 +1,43 @@
 from flask import Flask, request, redirect, render_template_string, url_for, send_file
-import jwt
 import psycopg2
-from datetime import datetime, timedelta, timezone
 import bcrypt
 import os
+from pathlib import Path
 
 app = Flask(__name__)
 
 # --- КОНФИГУРАЦИЯ ---
 SUPERSET_HOST = "http://127.0.0.1:8088"
-DASHBOARD_URL = "/superset/dashboard/p/ljrVYZQ09EQ/" 
+DASHBOARD_URL = "/superset/dashboard/p/LE01l49mbwM/" 
 POSTGRES_URI = "dbname=db user=db_user password=db_password host=localhost port=5432" 
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin"
-# УКАЗЫВАЕМ ВАШ АБСОЛЮТНЫЙ ПУТЬ К ФАЙЛУ (для использования в send_file)
-ABSOLUTE_IMAGE_PATH = "/home/agielso/repos/skill-matrix-project/flask_auth/images/bussines.jpg"
+# Путь к фону логина: каталог приложения + images/, либо переменная окружения FLASK_AUTH_BG_IMAGE
+_BASE_DIR = Path(__file__).resolve().parent
+ABSOLUTE_IMAGE_PATH = os.environ.get(
+    "FLASK_AUTH_BG_IMAGE",
+    str(_BASE_DIR / "images" / "bussines.jpg"),
+)
 # --- КОНФИГУРАЦИЯ ---
 
 
-# ✅ НОВЫЙ МАРШРУТ: Специально для обслуживания изображения по абсолютному пути
+# ✅ МАРШРУТ: Специально для обслуживания изображения по абсолютному пути
 @app.route('/images/bussines.jpg')
 def serve_bussines_image():
     """Обслуживает файл по абсолютному пути, указанному в ABSOLUTE_IMAGE_PATH."""
     try:
         # Используем send_file для отправки файла по абсолютному пути.
         return send_file(ABSOLUTE_IMAGE_PATH, mimetype='image/jpeg')
-    except FileNotFoundError:
+    except OSError:
         # Если файл не найден по абсолютному пути, возвращаем 404.
         print(f"File not found at: {ABSOLUTE_IMAGE_PATH}")
-        return "Image Not Found", 404
+        return "Изображение не найдено", 404
     except Exception as e:
         print(f"Error serving image: {e}")
-        return "Internal Server Error", 500
+        return "Внутренняя ошибка сервера", 500
 
 
-# --- ФУНКЦИИ БАЗЫ ДАННЫХ (ОСТАВЛЕНЫ БЕЗ ИЗМЕНЕНИЙ) ---
+# --- ФУНКЦИИ БАЗЫ ДАННЫХ ---
 def connect_db():
     return psycopg2.connect(POSTGRES_URI)
 
@@ -51,25 +54,28 @@ def get_user_data(username):
         print(f"Database error while fetching user: {e}")
         return None
 
+# Исправленная версия insert_user_data - возвращает кортеж (success, error_message)
 def insert_user_data(username, employee_id, password):
     try:
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         conn = connect_db()
         cur = conn.cursor()
-        cur.execute("INSERT INTO dev.flask_users (user_name, employee_id, password_hash) VALUES (%s, %s, %s)", 
-                    (username, employee_id, hashed_password))
+        cur.execute(
+            "INSERT INTO dev.flask_users (user_name, employee_id, password_hash) VALUES (%s, %s, %s)", 
+            (username, employee_id, hashed_password)
+        )
         conn.commit()
         cur.close()
         conn.close()
-        return True
+        return True, None  # Успех, сообщение об ошибке отсутствует
     except psycopg2.errors.UniqueViolation:
-        return "User already exists or Employee ID is already registered"
+        return False, "Пользователь уже существует или идентификатор сотрудника уже зарегистрирован"
     except Exception as e:
         print(f"Database error while registering user: {e}")
-        return False
+        return False, str(e)  # Возвращаем ошибку
 
 
-# --- МАРШРУТЫ (ОСТАВЛЕНЫ БЕЗ ИЗМЕНЕНИЙ) ---
+# --- МАРШРУТЫ ---
 @app.route("/", methods=["GET", "POST"])
 def login():
     message = ""
@@ -97,6 +103,7 @@ def login():
     
     return render_template_string(LOGIN_TEMPLATE, message=message)
 
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     message = ""
@@ -110,13 +117,15 @@ def register():
         elif get_user_data(username):
             message = "Пользователь с таким именем уже существует."
         else:
-            result = insert_user_data(username, employee_id, password)
-            if result is True:
+            # ✅ Теперь result - это кортеж (success, error_msg)
+            success, error_msg = insert_user_data(username, employee_id, password)
+            
+            if success:
                 return redirect(url_for('login', registered=True))
-            elif "User already exists" in result:
-                message = "Пользователь с таким именем или Employee ID уже существует."
+            elif error_msg and "Пользователь уже существует" in error_msg:
+                message = "Пользователь с таким именем или идентификатором уже существует."
             else:
-                message = "Ошибка при регистрации. Проверьте подключение к БД."
+                message = f"Ошибка при регистрации: {error_msg}" if error_msg else "Ошибка при регистрации. Проверьте подключение к БД."
 
     if request.args.get('registered'):
         message = "Регистрация прошла успешно! Теперь войдите в систему."
@@ -124,8 +133,7 @@ def register():
     return render_template_string(REGISTER_TEMPLATE, message=message)
 
 
-# --- ОБНОВЛЕННЫЕ HTML-ШАБЛОНЫ ---
-
+# --- HTML-ШАБЛОНЫ ---
 LOGIN_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -135,12 +143,11 @@ LOGIN_TEMPLATE = """
     <style>
         /* Цвета */
         :root {
-            --color-primary: #38761D; /* Темно-зеленый (кнопки, акценты) */
-            --color-secondary: #F4F0E0; /* Светло-бежевый/кремовый (фон контейнера) */
-            --color-text: #1C2718; /* Очень темно-зеленый/черный для текста */
+            --color-primary: #38761D;
+            --color-secondary: #F4F0E0;
+            --color-text: #1C2718;
             --color-error: #CC0000;
             --color-success: #10b981;
-            /* ✅ ИЗМЕНЕНИЕ: Теперь ссылаемся на новый Flask-маршрут */
             --bg-image: url('/images/bussines.jpg'); 
         }
 
@@ -159,11 +166,9 @@ LOGIN_TEMPLATE = """
         }
         
         .container { 
-            /* Прозрачность и размытие */
             background: rgba(255, 255, 255, 0.2); 
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px); 
-            
             padding: 30px; 
             border-radius: 12px; 
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
@@ -172,7 +177,6 @@ LOGIN_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.3); 
         }
         
-        /* Стиль для основного заголовка "Матрица компетенций" */
         h2 { 
             color: var(--color-primary); 
             font-size: 1.8em;
@@ -182,7 +186,6 @@ LOGIN_TEMPLATE = """
             text-align: center;
         }
 
-        /* Стиль для подзаголовка "Вход в систему" */
         h3 { 
             color: var(--color-primary); 
             font-size: 1.2em;
@@ -266,29 +269,11 @@ LOGIN_TEMPLATE = """
         .small-text a:hover { 
             text-decoration: underline; 
         }
-
-        ul { 
-            list-style: none; 
-            padding: 0; 
-            margin-top: 10px; 
-            text-align: left; 
-            font-size: 0.85em; 
-        }
-
-        ul li { 
-            margin-bottom: 5px; 
-            color: var(--color-text); 
-        }
-
-        b { 
-            color: var(--color-primary); 
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Матрица компетенций</h2>
-        
         <h3>Вход в систему</h3>
         
         {% if message %}
@@ -308,7 +293,6 @@ LOGIN_TEMPLATE = """
         <div class="small-text">
             Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a>
         </div>
-        
     </div>
 </body>
 </html>
@@ -321,14 +305,12 @@ REGISTER_TEMPLATE = """
     <title>Регистрация</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
-        /* Цвета */
         :root {
-            --color-primary: #38761D; /* Темно-зеленый (кнопки, акценты) */
-            --color-secondary: #F4F0E0; /* Светло-бежевый/кремовый (фон контейнера) */
-            --color-text: #1C2718; /* Очень темно-зеленый/черный для текста */
+            --color-primary: #38761D;
+            --color-secondary: #F4F0E0;
+            --color-text: #1C2718;
             --color-error: #CC0000;
             --color-success: #10b981;
-            /* ✅ ИЗМЕНЕНИЕ: Теперь ссылаемся на новый Flask-маршрут */
             --bg-image: url('/images/bussines.jpg'); 
         }
 
@@ -347,11 +329,9 @@ REGISTER_TEMPLATE = """
         }
         
         .container { 
-            /* Прозрачность и размытие */
             background: rgba(255, 255, 255, 0.2); 
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px); 
-            
             padding: 30px; 
             border-radius: 12px; 
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
@@ -360,17 +340,6 @@ REGISTER_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
-        /* Стиль для основного заголовка "Матрица компетенций" */
-        h2 { 
-            color: var(--color-primary); 
-            font-size: 1.8em;
-            margin-top: 0;
-            margin-bottom: 10px; 
-            font-weight: 900;
-            text-align: center;
-        }
-
-        /* Стиль для подзаголовка "Регистрация пользователя" */
         h3 { 
             color: var(--color-primary); 
             font-size: 1.2em;
@@ -387,7 +356,7 @@ REGISTER_TEMPLATE = """
             color: var(--color-text); 
         }
 
-        input[type="text"], input[type="email"], input[type="password"] { 
+        input[type="text"], input[type="password"] { 
             width: 100%; 
             padding: 12px; 
             margin-bottom: 20px; 
@@ -398,7 +367,7 @@ REGISTER_TEMPLATE = """
             background: rgba(255, 255, 255, 0.8);
         }
 
-        input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus { 
+        input[type="text"]:focus, input[type="password"]:focus { 
             border-color: var(--color-primary); 
             outline: none; 
             box-shadow: 0 0 0 3px rgba(56, 118, 29, 0.3); 
@@ -458,7 +427,6 @@ REGISTER_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        
         <h3>Регистрация пользователя</h3>
 
         {% if message %}
@@ -470,7 +438,7 @@ REGISTER_TEMPLATE = """
         <form method="post" action="/register">
             <label for="username">Имя пользователя:</label>
             <input type="text" id="username" name="username" required><br>
-            <label for="employee_id">Employee ID (Идентификатор сотрудника):</label>
+            <label for="employee_id">Идентификатор сотрудника:</label>
             <input type="text" id="employee_id" name="employee_id" required><br> 
             <label for="password">Пароль:</label>
             <input type="password" id="password" name="password" required><br>

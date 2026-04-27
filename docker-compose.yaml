@@ -31,9 +31,13 @@ services:
       - .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@db:5432/airflow_db
+      DBT_PROJECT_HOST_PATH: /opt/airflow/dbt/my_matrix
+      DBT_PROFILES_HOST_PATH: /opt/airflow/dbt/profiles.yml
+      AIRFLOW_DOCKER_NETWORK: skill-matrix-project_my-network
     volumes: 
       - ./airflow/dags:/opt/airflow/dags
       - ./parser:/opt/airflow/generate
+      - ./dbt:/opt/airflow/dbt
       - /var/run/docker.sock:/var/run/docker.sock
     group_add:
       - '1001'
@@ -61,6 +65,24 @@ services:
       - my-network
     # command: run  
     command: bash -c "sleep 60 && dbt run"
+
+  fastapi:
+    container_name: fastapi_container
+    build:
+      context: .
+      dockerfile: fastapi_app/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://db_user:db_password@db:5432/db
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOW_SQLITE_FALLBACK: "false"
+      BOOTSTRAP_FROM_LEGACY: "true"
+      LEGACY_SCHEMA: dev
+    depends_on:
+      - db
+    networks:
+      - my-network
 
 
   redis:
